@@ -225,6 +225,29 @@ impl Default for AdaptiveSuggestions {
     }
 }
 
+/// What picking another agent does to a chat that already has a conversation.
+/// A session is paired to one agent, so every option starts a new session; they
+/// differ in what happens to the one on screen. An empty chat always just
+/// switches in place, and a running one always gets a new tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentSwitchBehavior {
+    /// Keep the conversation and open the new agent in a new tab.
+    NewTab,
+    /// Switch in the same tab and attach the conversation to the composer as a
+    /// past-session mention, so the new agent receives it with the next message.
+    Handoff,
+    /// Switch in the same tab and start over; the conversation stays in history.
+    /// The default, and how switching always worked before this setting existed.
+    Reset,
+}
+
+impl Default for AgentSwitchBehavior {
+    fn default() -> Self {
+        Self::Reset
+    }
+}
+
 /// User-facing toggles surfaced in Settings → General. Moved out of
 /// `state.json`'s `AppState.settings` (issue #64) into its own validated,
 /// human-editable `config.toml`.
@@ -303,6 +326,9 @@ pub struct AppSettings {
     /// `<next_steps>` block; "off" disables it.
     #[serde(default)]
     pub adaptive_suggestions: AdaptiveSuggestions,
+    /// What switching agents does to a chat with a conversation in it.
+    #[serde(default)]
+    pub agent_switch_behavior: AgentSwitchBehavior,
     /// Inline Git blame in the code editor. Default ON; when off the editor
     /// doesn't even load the extension (no blame IPC).
     #[serde(default = "default_true")]
@@ -412,6 +438,7 @@ impl Default for AppSettings {
             legacy_code_editor_theme: None,
             legacy_atlas_theme: None,
             adaptive_suggestions: AdaptiveSuggestions::default(),
+            agent_switch_behavior: AgentSwitchBehavior::default(),
             git_blame_inline: true,
             git_auto_fetch: true,
             auto_update: true,
@@ -537,6 +564,13 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
         "adaptiveSuggestions",
         "# Next-step suggestion chips in the agent chat's per-turn card.\n\
          # Exactly \"agent\" or \"off\", nothing else. (default: \"agent\")",
+    ),
+    (
+        "agentSwitchBehavior",
+        "# What picking another agent does to a chat that has a conversation:\n\
+         # \"new-tab\" keeps it and opens the new agent in a new tab, \"handoff\"\n\
+         # switches in place and attaches it to the next message, \"reset\"\n\
+         # switches in place and starts over. (default: \"reset\")",
     ),
     (
         "gitBlameInline",
@@ -889,6 +923,7 @@ pub struct SettingsPatch {
     pub icon_theme: Option<String>,
     pub app_icon: Option<String>,
     pub adaptive_suggestions: Option<AdaptiveSuggestions>,
+    pub agent_switch_behavior: Option<AgentSwitchBehavior>,
     pub git_blame_inline: Option<bool>,
     pub git_auto_fetch: Option<bool>,
     pub auto_update: Option<bool>,
@@ -946,6 +981,9 @@ impl SettingsPatch {
         }
         if let Some(v) = self.adaptive_suggestions {
             settings.adaptive_suggestions = v;
+        }
+        if let Some(v) = self.agent_switch_behavior {
+            settings.agent_switch_behavior = v;
         }
         if let Some(v) = self.git_blame_inline {
             settings.git_blame_inline = v;
@@ -1061,6 +1099,14 @@ impl SettingsPatch {
                 AdaptiveSuggestions::Off => "off",
             };
             table["adaptiveSuggestions"] = toml_edit::value(s);
+        }
+        if let Some(v) = self.agent_switch_behavior {
+            let s = match v {
+                AgentSwitchBehavior::NewTab => "new-tab",
+                AgentSwitchBehavior::Handoff => "handoff",
+                AgentSwitchBehavior::Reset => "reset",
+            };
+            table["agentSwitchBehavior"] = toml_edit::value(s);
         }
         if let Some(inner) = &self.updater_ignored_version {
             match inner {
@@ -2423,6 +2469,7 @@ someFutureKey = \"left alone\"
             icon_theme: Some(atlas_icon_theme::MINIMAL_ICON_THEME_ID.to_string()),
             app_icon: Some("light".to_string()),
             adaptive_suggestions: Some(AdaptiveSuggestions::Off),
+            agent_switch_behavior: Some(AgentSwitchBehavior::Handoff),
             git_blame_inline: Some(!defaults.git_blame_inline),
             git_auto_fetch: Some(!defaults.git_auto_fetch),
             auto_update: Some(!defaults.auto_update),

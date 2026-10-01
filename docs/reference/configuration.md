@@ -101,6 +101,12 @@ uiScale = 1.0
 # Exactly "agent" or "off", nothing else. (default: "agent")
 adaptiveSuggestions = "agent"
 
+# What picking another agent does to a chat that has a conversation:
+# "new-tab" keeps it and opens the new agent in a new tab, "handoff"
+# switches in place and attaches it to the next message, "reset"
+# switches in place and starts over. (default: "reset")
+agentSwitchBehavior = "reset"
+
 # updaterIgnoredVersion: a release you chose to skip in the update
 # prompt. Absent unless one was ignored — TOML has no null, so "unset"
 # means the key simply isn't here. Delete the line to clear it; never
@@ -174,6 +180,7 @@ wrote; `toml_edit` just preserves whatever comments are already there.
 | `iconTheme` | string | `"material-icon-theme"` | a plain id (letters, digits, `.`, `-`, `_`) — it names a directory under `~/.config/atlas/icon-themes/`. `"minimal"` keeps Atlas's lucide icons. See `docs/reference/icon-themes.md` |
 | `appIcon` | string | `"dark"` | a plain id (letters, digits, `-`, `_`) from `src-tauri/icons/app-icons/app-icons.json` — today `"dark"` or `"light"`. An id this Atlas does not ship shows the default without rewriting the file. macOS only: `"dark"` is the bundle's own Liquid Glass icon; any other replaces the Dock icon and the bundle's Finder/Launchpad icon, re-applied at every launch |
 | `adaptiveSuggestions` | `"agent"` \| `"off"` | `"agent"` | exactly one of these two strings |
+| `agentSwitchBehavior` | `"new-tab"` \| `"handoff"` \| `"reset"` | `"reset"` | exactly one of these three strings. An empty chat always switches in place and a running one always gets a new tab, whatever this says |
 | `gitBlameInline` | boolean | `true` | — |
 | `gitAutoFetch` | boolean | `true` | — |
 | `autoUpdate` | boolean | `true` | — |

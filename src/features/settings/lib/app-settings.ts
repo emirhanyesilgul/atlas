@@ -61,6 +61,11 @@ export interface AppSettings {
    *  `<next_steps>` block (uses the live session context, no BYOK); "off"
    *  disables it. (Legacy "parse"/"llm" values are treated as enabled.) */
   adaptiveSuggestions: "off" | "agent";
+  /** What picking another agent does to a chat that has a conversation (see
+   *  `switch-agent.ts`): "reset" (default) switches in place and starts over,
+   *  "new-tab" keeps it and opens the new agent in a new tab, "handoff"
+   *  switches in place and attaches it to the next message. */
+  agentSwitchBehavior: "new-tab" | "handoff" | "reset";
   /** Inline Git blame in the code editor — dim author/age/summary annotation
    *  trailing the active line. Off = the CodeMirror extension isn't loaded. */
   gitBlameInline: boolean;
@@ -147,6 +152,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   iconTheme: "material-icon-theme",
   appIcon: DEFAULT_APP_ICON,
   adaptiveSuggestions: "agent",
+  agentSwitchBehavior: "reset",
   gitBlameInline: true,
   gitAutoFetch: true,
   autoUpdate: true,

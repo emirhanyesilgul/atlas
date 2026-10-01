@@ -38,7 +38,11 @@ import {
 } from "@/features/agents/lib/agent-meta";
 import { canSignIn, promptSignIn } from "../lib/agent-signin";
 import { forkSessionToNewTab } from "../lib/fork-session";
-import { switchAgentForTab } from "@/features/chat/lib/switch-agent";
+import {
+  SESSION_HANDOFF_EVENT,
+  switchAgentForTab,
+  type SessionHandoffDetail,
+} from "@/features/chat/lib/switch-agent";
 import { AgentMark } from "@/components/agent-mark";
 import { loadNativeEffort } from "../lib/native-model-pref";
 import { loadCachedAcpModels } from "../lib/acp-models-cache";
@@ -1809,6 +1813,25 @@ export function MessageInput({
     window.addEventListener(COMMENT_LINK_EVENT, handler);
     return () => window.removeEventListener(COMMENT_LINK_EVENT, handler);
   }, [tabId, disabled]);
+
+  // An agent switch with `agentSwitchBehavior: "handoff"`: the conversation
+  // the tab just left, as a past-session chip at the start of the draft, so
+  // the next message carries it to the new agent (`switch-agent.ts`).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<SessionHandoffDetail>).detail;
+      if (!detail || detail.tabId !== tabId) return;
+      const input = inputRef.current;
+      if (!input) return;
+      const attached = input
+        .getMentions()
+        .some((m) => m.kind === "past_session" && m.id === detail.mention.id);
+      if (!attached) input.insertMention(detail.mention, 0, 0);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+    window.addEventListener(SESSION_HANDOFF_EVENT, handler);
+    return () => window.removeEventListener(SESSION_HANDOFF_EVENT, handler);
+  }, [tabId]);
 
   const submit = useCallback(() => {
     // Hard gate: Claude Code missing or not authed — sending would just

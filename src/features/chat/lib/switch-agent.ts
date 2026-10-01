@@ -1,7 +1,20 @@
+import { toast } from "sonner";
 import { useChatStore } from "@/features/chat/stores/chat-store";
+import { useSettingsStore } from "@/features/settings/stores/settings-store";
 import { NATIVE_AGENT, isBusyAgentStatus, type SwitchableAgent } from "@/types/agent";
-import { switchableAgentIds } from "@/features/agents/lib/agent-meta";
-import { openNewAgentChat } from "./open-agent-session";
+import { agentMeta, switchableAgentIds } from "@/features/agents/lib/agent-meta";
+import type { MentionPastSession } from "./mentions";
+import { openAgentChatInNewTab } from "./open-agent-session";
+import { projectPathForTab } from "./tab-project";
+
+/** The window event a handoff fires; the composer of `tabId` inserts the
+ *  previous conversation as a past-session chip. */
+export const SESSION_HANDOFF_EVENT = "atlas:chat-handoff-session";
+
+export interface SessionHandoffDetail {
+  tabId: string;
+  mention: MentionPastSession;
+}
 
 /**
  * Bind a chat tab to a different coding agent — the single implementation
@@ -9,10 +22,15 @@ import { openNewAgentChat } from "./open-agent-session";
  * picker), so they can never drift apart.
  *
  * A session is paired to ONE agent for its lifetime, so switching means a fresh
- * session. Three cases:
+ * session. The cases:
  * - empty chat  → flip the agent in place, nothing to lose.
- * - idle chat   → reset in place bound to the new agent (the old conversation
- *                 is already persisted per-turn and stays in history).
+ * - idle chat   → the user's `agentSwitchBehavior` setting decides:
+ *                 "reset" (default) switches in place and starts over;
+ *                 "new-tab" leaves it on screen and opens a fresh tab on the
+ *                 new agent; "handoff" switches in place and attaches the
+ *                 conversation to the composer as a past-session chip, so the
+ *                 new agent receives it with the next message. Either way the
+ *                 old conversation is persisted per-turn and stays in history.
  * - BUSY chat   → leave it completely alone and open a fresh tab on the new
  *                 agent. Clearing here would orphan the live turn: its deltas
  *                 would find no tab, Stop would vanish, and it would keep
@@ -31,10 +49,32 @@ export function switchAgentForTab(tabId: string, next: SwitchableAgent): void {
   if ((sess?.agentType ?? NATIVE_AGENT) === next) return;
 
   const startingOnly = isStartingOnly(sess);
-  if (isBusyAgentStatus(sess?.status) && !startingOnly) {
-    openNewAgentChat(next);
+  if (!startingOnly && isBusyAgentStatus(sess?.status)) {
+    openAgentChatInNewTab(next);
     return;
   }
+  let handoff: MentionPastSession | undefined;
+  if (!startingOnly && (sess?.messages.length ?? 0) > 0) {
+    const behavior = useSettingsStore.getState().settings.agentSwitchBehavior;
+    // A handoff needs the transcript Atlas recorded under the bound session;
+    // without one there is nothing to attach, so keep the conversation instead.
+    if (behavior === "new-tab" || (behavior === "handoff" && !sess?.acpSessionId)) {
+      openAgentChatInNewTab(next);
+      return;
+    }
+    if (behavior === "handoff" && sess?.acpSessionId) {
+      const title = sess.title && sess.title !== "New Chat" ? sess.title : "Previous session";
+      handoff = {
+        kind: "past_session",
+        id: sess.acpSessionId,
+        displayName: title,
+        sessionId: sess.acpSessionId,
+        sessionTitle: title,
+        cwd: sess.workingDirectory || projectPathForTab(tabId) || "",
+      };
+    }
+  }
+  const previousAgent = sess?.agentType ?? NATIVE_AGENT;
   const held = startingOnly ? sess?.pendingSend : undefined;
   if ((sess?.messages.length ?? 0) > 0) {
     chat.actions.clearSession(tabId);
@@ -51,6 +91,13 @@ export function switchAgentForTab(tabId: string, next: SwitchableAgent): void {
     );
     actions.updateSessionStatus(tabId, "running");
     actions.setPendingSend(tabId, held);
+  }
+  if (handoff) {
+    const detail: SessionHandoffDetail = { tabId, mention: handoff };
+    window.dispatchEvent(new CustomEvent(SESSION_HANDOFF_EVENT, { detail }));
+    toast(
+      `${agentMeta(previousAgent).label} conversation attached. Your next message hands it to ${agentMeta(next).label}.`,
+    );
   }
   window.dispatchEvent(new CustomEvent("atlas:chat-focus", { detail: { tabId } }));
 }

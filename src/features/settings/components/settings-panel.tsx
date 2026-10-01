@@ -42,6 +42,7 @@ import { useUpdaterStore } from "@/features/updater/stores/updater-store";
 import { isLinux, isWindows } from "@/lib/platform";
 import { useSettingsNav, type SettingsSection } from "../stores/settings-nav-store";
 import { openConfigFile } from "../lib/atlas-config-api";
+import type { AppSettings } from "../lib/app-settings";
 import { useSettingsStore } from "@/features/settings/stores/settings-store";
 import { useAgentRegistryStore } from "@/features/agents/stores/agent-registry-store";
 
@@ -541,6 +542,24 @@ function GeneralSettings() {
           checked={settings.adaptiveSuggestions !== "off"}
           onChange={(next) => updateSettings({ adaptiveSuggestions: next ? "agent" : "off" })}
         />
+      </SettingRow>
+      <SettingRow
+        label="Switching agents in a chat"
+        description="What picking another agent does once a chat has a conversation. Start over switches in place with a clean chat. New tab keeps the conversation on screen and opens the new agent beside it. Hand off switches in place and attaches the conversation to your next message, so the new agent picks up where the last one stopped. Every conversation stays in your history."
+      >
+        <select
+          value={settings.agentSwitchBehavior}
+          onChange={(e) =>
+            updateSettings({
+              agentSwitchBehavior: e.target.value as AppSettings["agentSwitchBehavior"],
+            })
+          }
+          className="h-7 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] outline-none"
+        >
+          <option value="reset">Start over</option>
+          <option value="new-tab">New tab</option>
+          <option value="handoff">Hand off</option>
+        </select>
       </SettingRow>
       <SettingRow
         label="Let Atlas Agent navigate the app"
