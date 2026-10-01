@@ -315,13 +315,22 @@ pub fn keybindings_set_close_tab_accelerator(
     app: AppHandle,
     accelerator: Option<String>,
 ) -> Result<(), String> {
-    use tauri::Manager;
-    let Some(item) = app.try_state::<crate::menu::CloseTabItem>() else {
-        return Ok(());
-    };
-    item.0
-        .set_accelerator(accelerator.as_deref())
-        .map_err(|e| e.to_string())
+    // The native menu (and so `crate::menu`) exists on macOS only.
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Manager;
+        let Some(item) = app.try_state::<crate::menu::CloseTabItem>() else {
+            return Ok(());
+        };
+        item.0
+            .set_accelerator(accelerator.as_deref())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, accelerator);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
