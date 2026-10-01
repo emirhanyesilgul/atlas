@@ -61,6 +61,10 @@ function rustFiles(dir: string, out: string[] = []): string[] {
 
 const rel = (p: string) => path.relative(REPO_ROOT, p).split(path.sep).join("/");
 const inside = (dir: string, target: string) => target === dir || target.startsWith(`${dir}/`);
+// `inside` for absolute paths. They carry the platform separator (`\` on
+// Windows), so both sides go to `/` first or nothing is ever inside anything.
+const posix = (p: string) => path.resolve(p).split(path.sep).join("/");
+const insideAbs = (dir: string, target: string) => inside(posix(dir), posix(target));
 
 interface Escape {
   pkg: string;
@@ -88,8 +92,8 @@ function escapes(): Escape[] {
         const lit = m[1].replace(/^\//, "");
         if (!/(^|\/)\.\.(\/|$)/.test(lit)) continue;
         const candidates = [path.dirname(file), pkgAbs].map((base) => path.resolve(base, lit));
-        if (candidates.some((c) => inside(pkgAbs, c))) continue;
-        const target = candidates.find((c) => inside(REPO_ROOT, c) && existsSync(c));
+        if (candidates.some((c) => insideAbs(pkgAbs, c))) continue;
+        const target = candidates.find((c) => insideAbs(REPO_ROOT, c) && existsSync(c));
         if (!target) continue;
         const line = src.slice(0, m.index).split("\n").length;
         found.push({ pkg: pkg.name, site: `${rel(file)}:${line}`, target: rel(target) });
