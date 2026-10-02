@@ -835,22 +835,28 @@ mod tests {
     #[test]
     fn npm_args_pin_config_and_bound_fetches() {
         let node_dir = Path::new("/opt/atlas/node/node-v24");
+        let prefix = Path::new("/opt/atlas/npx/codex");
         let npm = node_dir.join("bin/npm");
         let args = npm_command_args(
             &npm,
             node_dir,
-            Some(Path::new("/opt/atlas/npx/codex")),
+            Some(prefix),
             "install",
             &["codex-acp@0.0.0 - 1.0.0", "--save-exact"],
         );
 
+        // The pinned paths are spelled with `join`, as the code builds them,
+        // so the separator is the host's: on Windows `cache` is joined with
+        // `\` onto a `/`-spelled base.
         let joined = args.join(" ");
         assert!(
             joined.starts_with(&format!(
-                "{} --prefix /opt/atlas/npx/codex install --cache=/opt/atlas/node/node-v24/cache \
-             --userconfig /opt/atlas/node/node-v24/blank_user_npmrc \
-             --globalconfig /opt/atlas/node/node-v24/blank_global_npmrc ",
-                npm.display()
+                "{} --prefix {} install --cache={} --userconfig {} --globalconfig {} ",
+                npm.display(),
+                prefix.display(),
+                node_dir.join("cache").display(),
+                node_dir.join("blank_user_npmrc").display(),
+                node_dir.join("blank_global_npmrc").display(),
             )),
             "got {joined}"
         );

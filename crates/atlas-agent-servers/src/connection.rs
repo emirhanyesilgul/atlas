@@ -620,7 +620,9 @@ struct SessionConfigResponse {
 /// is right: the agent is on pipes and must never try to prompt.
 struct AgentChild {
     inner: tokio::process::Child,
-    /// The process group to signal. `None` where there is no such thing.
+    /// The process group to signal. Unix only: elsewhere there is no such
+    /// thing, and the kill is `start_kill` on the direct child alone.
+    #[cfg(unix)]
     pgid: Option<i32>,
 }
 
@@ -639,11 +641,11 @@ impl AgentChild {
             }
         }
         let inner = command.spawn()?;
-        #[cfg(unix)]
-        let pgid = inner.id().map(|pid| pid as i32);
-        #[cfg(not(unix))]
-        let pgid = None;
-        Ok(Self { inner, pgid })
+        Ok(Self {
+            #[cfg(unix)]
+            pgid: inner.id().map(|pid| pid as i32),
+            inner,
+        })
     }
 
     /// Kill the child and everything it spawned. Idempotent; safe after the

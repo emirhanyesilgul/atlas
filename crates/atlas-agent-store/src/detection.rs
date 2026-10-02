@@ -129,21 +129,25 @@ pub fn find_on_path(program: &str, path_var: &OsStr) -> Option<PathBuf> {
 
 /// On Windows an executable is found by extension; elsewhere the name is the
 /// name.
+///
+/// A fixed list rather than `PATHEXT`: a hit becomes a `Custom` entry that
+/// `std::process::Command` spawns, and that runs `.exe` directly and
+/// `.cmd`/`.bat` through `cmd.exe` — a `.vbs` or `.js` "found" via `PATHEXT`
+/// would be a detection that cannot start.
+#[cfg(windows)]
 fn executable_names(program: &str) -> Vec<String> {
-    #[cfg(windows)]
-    {
-        if Path::new(program).extension().is_some() {
-            return vec![program.to_string()];
-        }
-        return ["exe", "cmd", "bat"]
-            .iter()
-            .map(|extension| format!("{program}.{extension}"))
-            .collect();
+    if Path::new(program).extension().is_some() {
+        return vec![program.to_string()];
     }
-    #[cfg(not(windows))]
-    {
-        vec![program.to_string()]
-    }
+    ["exe", "cmd", "bat"]
+        .iter()
+        .map(|extension| format!("{program}.{extension}"))
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn executable_names(program: &str) -> Vec<String> {
+    vec![program.to_string()]
 }
 
 fn is_executable_file(path: &Path) -> bool {

@@ -845,6 +845,9 @@ fn zip_with(path: &str, contents: &[u8], mode: u32) -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
+// Unix only, like the permission test that uses it: elsewhere there is no
+// mode bit to assert on after the extract.
+#[cfg(unix)]
 fn tar_gz_with_mode(path: &str, contents: &[u8], mode: u32) -> Vec<u8> {
     let mut tar = tar::Builder::new(Vec::new());
     let mut header = tar::Header::new_gnu();
