@@ -90,6 +90,11 @@ function cloned(overrides: Partial<ClonedRepo> = {}): ClonedRepo {
 
 const calls = (cmd: string) => mocks.invoke.mock.calls.filter((c) => c[0] === cmd);
 
+/** `n` the way the panel's `toLocaleString` writes it on this machine, as a
+ *  pattern: "1,234" in one locale is "1.234" in another. */
+const grouped = (n: number) =>
+  new RegExp(n.toLocaleString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
 /** Type into the search box and submit, as a user would. */
 async function search(term: string) {
   const user = userEvent.setup();
@@ -141,8 +146,8 @@ describe("searching", () => {
     render(<GithubPanel />);
     await search("atlas");
     expect(await screen.findByText("ahammadnafiz/atlas")).toBeInTheDocument();
-    // Thousands separator comes from `toLocaleString`.
-    expect(screen.getByText(/1,234/)).toBeInTheDocument();
+    // Thousands separator comes from `toLocaleString`, so it is the machine's.
+    expect(screen.getByText(grouped(1234))).toBeInTheDocument();
     expect(screen.getByText(/56/)).toBeInTheDocument();
   });
 
@@ -329,7 +334,7 @@ describe("the cloned repos", () => {
     expect(screen.getByText("main")).toBeInTheDocument();
     expect(screen.getByText("detached")).toBeInTheDocument();
     expect(screen.getByText("A high-performance code editor")).toBeInTheDocument();
-    expect(screen.getByText(/60,000/)).toBeInTheDocument();
+    expect(screen.getByText(grouped(60_000))).toBeInTheDocument();
     expect(screen.queryByText("Search for repositories")).not.toBeInTheDocument();
 
     await search("anything");

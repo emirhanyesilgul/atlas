@@ -74,7 +74,8 @@ describe("formatDuration", () => {
   it("drops minutes, then hours, rather than overflowing its tile", () => {
     // Nobody reads the `06m` in `42488h 06m`, and the tile is 150px wide.
     expect(formatDuration(142 * 3600)).toBe("142h");
-    expect(formatDuration(42_488 * 3600 + 6 * 60)).toBe("1,770d");
+    // `toLocaleString` groups the days in the machine's locale (1,770 / 1.770).
+    expect(formatDuration(42_488 * 3600 + 6 * 60)).toBe(`${(1770).toLocaleString()}d`);
   });
 
   it("never renders wider than a stat tile can hold", () => {
