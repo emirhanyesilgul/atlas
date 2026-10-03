@@ -18,6 +18,10 @@
     "cross": true
   },
   {
+    "crate": "atlas-profile",
+    "clippy": true
+  },
+  {
     "crate": "atlas-agent-servers",
     "clippy": true,
     "cross": true

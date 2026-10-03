@@ -43,6 +43,7 @@ members = [
   "crates/atlas-memory",
   "crates/atlas-native-agent",
   "crates/atlas-process",
+  "crates/atlas-profile",
   "crates/atlas-redact",
   "crates/atlas-terminal",
   "crates/atlas-theme",
@@ -801,6 +802,8 @@ opt-level = 1
 [profile.dev.package.atlas-native-agent]
 opt-level = 1
 [profile.dev.package.atlas-process]
+opt-level = 1
+[profile.dev.package.atlas-profile]
 opt-level = 1
 [profile.dev.package.atlas-redact]
 opt-level = 1
