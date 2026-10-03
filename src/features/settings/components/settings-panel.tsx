@@ -504,6 +504,15 @@ function GeneralSettings() {
         </select>
       </SettingRow>
       <SettingRow
+        label="Save to memory before switching agents"
+        description="Before you switch agents in a chat that has a conversation, the agent you are leaving is sent /remember, so it saves its decisions and findings to shared memory, and the switch waits for it. Only for agents that offer /remember. Costs one turn per switch; you can switch right away from the notice."
+      >
+        <Toggle
+          checked={settings.rememberBeforeSwitch}
+          onChange={(next) => updateSettings({ rememberBeforeSwitch: next })}
+        />
+      </SettingRow>
+      <SettingRow
         label="Mirror CLAUDE.md and .claude/rules into AGENTS.md"
         description="For agents that read AGENTS.md. When on, Atlas keeps a marked block in the active project's AGENTS.md with CLAUDE.md and every .claude/rules file, rewritten as they change, and creates AGENTS.md if there is none. Your own text outside the block is never changed. Turning it off removes the block. Hooks and permission lists are not instructions and are not copied."
       >

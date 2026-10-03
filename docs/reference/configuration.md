@@ -240,6 +240,7 @@ wrote; `toml_edit` just preserves whatever comments are already there.
 | `autoUpdate` | boolean | `true` | — |
 | `curatedPluginSync` | boolean | `false` | — |
 | `instructionSync` | boolean | `false` | — . See [Mirrored instructions](#mirrored-instructions-instructionsync) |
+| `rememberBeforeSwitch` | boolean | `false` | — . Acts only on a chat with a conversation whose agent advertises `/remember` (the bundled `remember` skill); waits at most 3 minutes, and the user can switch at once |
 | `updaterIgnoredVersion` | string, or absent | absent | — |
 | `enterToSend` | boolean | `true` | — |
 | `agentUiNavigation` | boolean | `true` | — |
