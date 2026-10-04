@@ -626,9 +626,10 @@ fn sha256_hex(content: &str) -> String {
 ///   detecting the drift rather than adopting the user's edit as "new
 ///   baseline" behind their back.
 ///
-/// Global-only, matching the design record: no per-project duplicate. Seeding
-/// writes the canonical copy only; whether an agent sees a skill is up to its
-/// projections, as for any other skill.
+/// Global-only, matching the design record: no per-project duplicate. A
+/// skill's first install also links it into the installed tools that read
+/// only their own folder ([`link_bundled_skill`]); after that, its projections
+/// are the user's, as for any other skill.
 pub fn ensure_bundled_skills() {
     let Some(home) = home_dir() else {
         return;
@@ -652,8 +653,9 @@ fn ensure_bundled_skill_at(root: &Path, skill: &BundledSkill) {
     let skill_md = dir.join("SKILL.md");
     let hash_file = dir.join(BUNDLED_HASH_FILE);
     let bundled_hash = sha256_hex(skill.skill_md);
+    let fresh = !skill_md.exists();
 
-    if skill_md.exists() {
+    if !fresh {
         let recorded_hash = fs::read_to_string(&hash_file).ok();
         let on_disk_matches_recorded = fs::read_to_string(&skill_md)
             .ok()
@@ -672,6 +674,30 @@ fn ensure_bundled_skill_at(root: &Path, skill: &BundledSkill) {
     }
     if fs::write(&skill_md, skill.skill_md).is_ok() {
         let _ = fs::write(&hash_file, &bundled_hash);
+        if fresh {
+            link_bundled_skill(root, skill.name);
+        }
+    }
+}
+
+/// Tools a bundled skill is linked into when it is first installed. Each reads
+/// only its own skills folder, so a skill seeded into the canonical store
+/// alone is invisible to them: Claude Code would never offer `/remember`.
+const BUNDLED_SKILL_TOOLS: &[&str] = &["claude-code", "codex"];
+
+/// Project a just-installed bundled skill into every detected tool in
+/// [`BUNDLED_SKILL_TOOLS`], through the ordinary [`project`] so the ledger
+/// records it like any skill the user linked. Only on first install: a user
+/// who later unlinks it keeps it unlinked across launches. A tool that already
+/// has an entry of that name (the user's own skill, or a link of theirs) is
+/// left alone.
+fn link_bundled_skill(root: &Path, name: &str) {
+    for id in BUNDLED_SKILL_TOOLS {
+        let Some(def) = tool_def(id) else { continue };
+        if !tool_detected(root, def) || tool_has_entry(root, def, "global", name) {
+            continue;
+        }
+        let _ = project(root, def, "global", name, false);
     }
 }
 
@@ -5481,6 +5507,81 @@ mod tests {
             fs::read_to_string(skills_base(&root).join("atlas-self-configure/SKILL.md")).unwrap();
         assert!(self_configure.contains("name: atlas-self-configure"));
 
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// Tests below create tool dirs under a temp root; an env override would
+    /// send the links to the real `$CLAUDE_CONFIG_DIR`/`$CODEX_HOME` instead.
+    fn tool_env_overridden() -> bool {
+        TOOL_REGISTRY
+            .iter()
+            .filter_map(|t| t.env_override)
+            .any(|v| std::env::var_os(v).is_some())
+    }
+
+    #[test]
+    fn a_fresh_bundled_skill_is_linked_into_every_detected_tool() {
+        if tool_env_overridden() {
+            return;
+        }
+        let root = tmp_root_isolated();
+        // Claude Code is installed, Codex is not.
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        ensure_bundled_skills_at(&root);
+
+        let claude = tool_def("claude-code").unwrap();
+        let codex = tool_def("codex").unwrap();
+        let ledger = read_ledger(&root);
+        for skill in BUNDLED_SKILLS {
+            let link = tool_link_path(&root, claude, "global", skill.name);
+            assert_eq!(
+                fs::read_to_string(link.join("SKILL.md")).unwrap(),
+                skill.skill_md
+            );
+            assert!(ledger
+                .projections
+                .get(skill.name)
+                .is_some_and(|per_tool| per_tool.contains_key(claude.id)));
+            assert!(!tool_has_entry(&root, codex, "global", skill.name));
+        }
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_unlinked_bundled_skill_stays_unlinked_on_the_next_launch() {
+        if tool_env_overridden() {
+            return;
+        }
+        let root = tmp_root_isolated();
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        ensure_bundled_skills_at(&root);
+        let claude = tool_def("claude-code").unwrap();
+        unproject(&root, claude, "global", REMEMBER.name).unwrap();
+
+        ensure_bundled_skills_at(&root);
+
+        assert!(!tool_has_entry(&root, claude, "global", REMEMBER.name));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn linking_leaves_a_tools_own_skill_of_that_name_alone() {
+        if tool_env_overridden() {
+            return;
+        }
+        let root = tmp_root_isolated();
+        let claude = tool_def("claude-code").unwrap();
+        let own = tool_link_path(&root, claude, "global", REMEMBER.name);
+        fs::create_dir_all(&own).unwrap();
+        fs::write(own.join("SKILL.md"), "the user's own remember").unwrap();
+
+        ensure_bundled_skills_at(&root);
+
+        assert!(!own.symlink_metadata().unwrap().file_type().is_symlink());
+        assert_eq!(
+            fs::read_to_string(own.join("SKILL.md")).unwrap(),
+            "the user's own remember"
+        );
         fs::remove_dir_all(&root).ok();
     }
 
