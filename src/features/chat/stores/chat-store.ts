@@ -422,14 +422,12 @@ interface ChatActions {
      *  The Codex equivalent of `setClaudePermissionMode`. */
     setAcpMode: (sessionId: string, modeId: string) => void;
     /** Forget this tab's ACP mode pick (not the saved preference): a resume
-     *  could not apply it, so the picker now shows the agent's own mode, and
-     *  leaving the flag set would make the next resume restore THAT as if the
-     *  user had chosen it. That resume falls back to the saved pick instead. */
+     *  could not apply it, so the picker now shows the agent's own mode, which
+     *  the user never chose. */
     dropAcpModePick: (sessionId: string) => void;
-    /** Show (a mode's display name) or clear (`undefined`) the composer bar
-     *  saying a resume could not restore the user's mode. A mode pick clears
-     *  it too. See `ChatSession.unrestoredMode`. */
-    setUnrestoredMode: (sessionId: string, modeName: string | undefined) => void;
+    /** Set or clear (`undefined`) the mode a resume could not restore. A mode
+     *  pick clears it too. See `ChatSession.unrestoredModeId`. */
+    setUnrestoredMode: (sessionId: string, modeId: string | undefined) => void;
     /** Set an agent-advertised config option (P2.2). Optimistic locally; the
      *  agent's own `config_option_update` is the authority and overwrites it. */
     /** Clear the answered/dismissed elicitation (P3.3). */
@@ -869,8 +867,7 @@ export const useChatStore = createSelectors(
             sess.disconnected = undefined;
             sess.updatedTo = undefined;
             sess.bindError = undefined;
-            // Nor is a mode the previous agent could not restore.
-            sess.unrestoredMode = undefined;
+            sess.unrestoredModeId = undefined;
             // The provider only applies to the native agent; clear it so the
             // composer re-defaults from BYOK keys if the native agent is chosen.
             sess.nativeProvider = undefined;
@@ -928,8 +925,7 @@ export const useChatStore = createSelectors(
               sess.claudePermissionMode = agentType === "claude-code" ? "default" : undefined;
               sess.claudePermissionModeExplicit = false;
               sess.acpModeExplicit = false;
-              // The resume this relabel is part of decides it afresh.
-              sess.unrestoredMode = undefined;
+              sess.unrestoredModeId = undefined;
               if (agentType === "claude-code") {
                 // Claude has no ACP modes — clear any stale picker state left
                 // by the previously-selected agent so no ghost mode pill shows.
@@ -946,13 +942,10 @@ export const useChatStore = createSelectors(
                 sess.acpAvailableModes = cached?.availableModes ?? [];
                 sess.acpCurrentMode = cached?.currentMode ?? undefined;
               }
-              // Same restore as createSession / switchChatAgent. Every tab
-              // starts on the native agent after a restart, so resuming any
-              // ACP thread comes through here; dropping the explicit flag
-              // without restoring the saved pick made the resume adopt the
-              // agent's own mode — a more permissive one than the user chose
-              // (issue 317). Crucially the ACP binding (acpAgentId /
-              // acpSessionId) is left intact — this only relabels.
+              // Same restore as createSession / switchChatAgent: after a
+              // restart every resumed ACP thread comes through here (see
+              // `resume-mode.ts`). The ACP binding (acpAgentId / acpSessionId)
+              // is left intact — this only relabels.
               applyPersistedModePref(sess, agentType);
             }
             // Reseed model state even when the agent type is UNCHANGED. This
@@ -1144,8 +1137,7 @@ export const useChatStore = createSelectors(
               // A first message still waiting on the old bind belongs to the
               // conversation being dropped, exactly like the queue below.
               session.pendingSend = undefined;
-              // So does a mode that session's resume could not restore.
-              session.unrestoredMode = undefined;
+              session.unrestoredModeId = undefined;
             }
             delete s.queues[sessionId];
           }),
@@ -1161,7 +1153,7 @@ export const useChatStore = createSelectors(
             next = CLAUDE_PERMISSION_MODES[(i + 1) % CLAUDE_PERMISSION_MODES.length];
             session.claudePermissionMode = next;
             session.claudePermissionModeExplicit = true;
-            session.unrestoredMode = undefined;
+            session.unrestoredModeId = undefined;
           });
           // "default" means "defer to the CLI's own configured default" —
           // cycling back to it DROPS the persisted pick rather than storing it.
@@ -1182,8 +1174,7 @@ export const useChatStore = createSelectors(
             if (session) {
               session.claudePermissionMode = mode;
               session.claudePermissionModeExplicit = true;
-              // A pick is the answer the mode-restore bar was asking for.
-              session.unrestoredMode = undefined;
+              session.unrestoredModeId = undefined;
             }
           });
           saveLastModePref("claude-code", mode === "default" ? null : mode);
@@ -1264,8 +1255,7 @@ export const useChatStore = createSelectors(
             if (session) {
               session.acpCurrentMode = modeId;
               session.acpModeExplicit = true;
-              // A pick is the answer the mode-restore bar was asking for.
-              session.unrestoredMode = undefined;
+              session.unrestoredModeId = undefined;
             }
           });
           // Persist the explicit pick per agent. agentType IS the plugin id
@@ -1280,10 +1270,10 @@ export const useChatStore = createSelectors(
             const session = s.sessions[sessionId];
             if (session) session.acpModeExplicit = false;
           }),
-        setUnrestoredMode: (sessionId, modeName) =>
+        setUnrestoredMode: (sessionId, modeId) =>
           set((s) => {
             const session = s.sessions[sessionId];
-            if (session) session.unrestoredMode = modeName;
+            if (session) session.unrestoredModeId = modeId;
           }),
         clearElicitation: (sessionId) =>
           set((s) => {

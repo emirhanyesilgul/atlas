@@ -935,6 +935,9 @@ export function MessageInput({
   // must never disable the toolbar.
   const blockedByGrant = noAiGrant && agentType === "atlas-agent";
   const disabled = disabledProp || blockedByGrant;
+  // A resume could not restore the user's mode (`ModeRestoreBar`): no send
+  // until they pick one. Only the send — typing and the mode picker stay live.
+  const modeUnrestored = useChatStore((s) => !!s.sessions[tabId]?.unrestoredModeId);
   // The BYOK provider/model bindings for the native agent stood here — the
   // provider pick, the model re-push on bind, the whole BYOK selection path.
   // Gone: the native agent's model comes from the seam's published catalogue
@@ -1886,6 +1889,7 @@ export function MessageInput({
       // stay in the composer strip and ride the next direct send.
       enqueueMessage(tabId, trimmed);
     } else {
+      if (modeUnrestored) return;
       const images = stagedImages;
       onSend(trimmed, mentions, images.length ? images : undefined);
       if (images.length) setStagedImages([]);
@@ -1905,6 +1909,7 @@ export function MessageInput({
     disabled,
     stagedImages,
     githubSyncing,
+    modeUnrestored,
   ]);
   submitRef.current = submit;
 
@@ -1914,7 +1919,8 @@ export function MessageInput({
   //   not running + any → SEND
   type Mode = "send" | "queue" | "stop";
   const mode: Mode = running ? (hasText ? "queue" : "stop") : "send";
-  const buttonEnabled = disabled ? false : mode === "stop" ? true : hasText;
+  const buttonEnabled =
+    disabled || (mode === "send" && modeUnrestored) ? false : mode === "stop" ? true : hasText;
 
   // One fixed placeholder, always. The composer used to swap in a queue hint
   // while a turn ran and a no-grant explanation when AI access was missing;
@@ -1966,8 +1972,8 @@ export function MessageInput({
             input below cannot send until the chat is switched. */}
         <RemovedAgentBar tabId={tabId} />
 
-        {/* A resume could not restore the user's mode — same strip: the next
-            prompt would run under the agent's mode, so say so until they pick. */}
+        {/* A resume could not restore the user's mode: nothing sends until
+            they pick one. */}
         <ModeRestoreBar tabId={tabId} />
 
         {/* Live plan docked on top of the input bar (JetBrains-Air style). */}

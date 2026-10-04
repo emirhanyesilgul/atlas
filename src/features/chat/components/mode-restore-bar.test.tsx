@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 //
 // The bar a resume leaves in the composer when it could not restore the
-// user's mode. It replaced a toast that went away by itself, so what matters
-// is that it stays until a pick and that its action reaches the picker.
+// user's mode. What matters is that it stays until a pick and that its action
+// reaches the picker.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
@@ -37,7 +37,9 @@ describe("ModeRestoreBar", () => {
   });
 
   it("names the mode it could not restore, and stays until the user picks one", () => {
-    useChatStore.getState().actions.setUnrestoredMode(TAB, "Read Only");
+    const { setAcpModes, setUnrestoredMode } = useChatStore.getState().actions;
+    setAcpModes(TAB, "auto", [{ id: "read-only", name: "Read Only" }], "codex");
+    setUnrestoredMode(TAB, "read-only");
     render(<ModeRestoreBar tabId={TAB} />);
     expect(screen.getByTestId("mode-restore-bar").textContent).toContain("Read Only");
 
@@ -46,7 +48,7 @@ describe("ModeRestoreBar", () => {
   });
 
   it("opens this tab's mode picker", async () => {
-    useChatStore.getState().actions.setUnrestoredMode(TAB, "Read Only");
+    useChatStore.getState().actions.setUnrestoredMode(TAB, "read-only");
     const opened = vi.fn();
     const onOpen = (e: Event) => opened((e as CustomEvent<{ tabId: string }>).detail.tabId);
     window.addEventListener(OPEN_MODE_PICKER_EVENT, onOpen);
