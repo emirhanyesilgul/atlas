@@ -414,7 +414,7 @@ static TOOL_REGISTRY: LazyLock<[ToolDef; 3]> = LazyLock::new(|| {
             ],
         },
         ToolDef {
-            id: "atlas",
+            id: ATLAS_TOOL_ID,
             display_name: "Atlas",
             // The native in-process "Atlas" agent. Enabled skills are
             // symlinked into a DEDICATED dir that only the in-process `AtlasSkillTool`
@@ -513,7 +513,7 @@ fn skills_base(root: &Path) -> PathBuf {
 /// [`skills_base`]; only consulted by [`migrate_legacy_skills`] to move any
 /// leftover content from an Atlas install that predates the store convergence.
 fn legacy_skills_base(root: &Path) -> PathBuf {
-    root.join(atlas_profile::dir_name()).join("skills")
+    atlas_profile::dir_in(root).join("skills")
 }
 
 /// One-time migration of anything still sitting in the pre-convergence
@@ -735,12 +735,16 @@ fn ensure_bundled_skills_at(root: &Path, profile: atlas_profile::Profile) {
         if shared && skills_base(root).join(name).join("SKILL.md").exists() {
             continue;
         }
-        ensure_bundled_skill_at(root, name, &content);
+        // A copy only this profile seeds (Atlas Dev's self-configure) stays out
+        // of the tools' own folders: Claude Code and Codex read those for every
+        // session on the machine, the installed Atlas's included.
+        let link = name == skill.name;
+        ensure_bundled_skill_at(root, name, &content, link);
     }
 }
 
 /// Seed one bundled skill under `root` (see [`ensure_bundled_skills`]).
-fn ensure_bundled_skill_at(root: &Path, name: &str, content: &str) {
+fn ensure_bundled_skill_at(root: &Path, name: &str, content: &str, link: bool) {
     let dir = skills_base(root).join(name);
     let skill_md = dir.join("SKILL.md");
     let hash_file = dir.join(BUNDLED_HASH_FILE);
@@ -766,7 +770,7 @@ fn ensure_bundled_skill_at(root: &Path, name: &str, content: &str) {
     }
     if fs::write(&skill_md, content).is_ok() {
         let _ = fs::write(&hash_file, &bundled_hash);
-        if fresh {
+        if fresh && link {
             link_bundled_skill(root, name);
         }
     }
@@ -911,7 +915,7 @@ fn atomic_write(path: &Path, payload: &str) -> Result<(), String> {
 fn tool_detected(root: &Path, def: &ToolDef) -> bool {
     // The native "Atlas" agent is in-process — always available, regardless of
     // whether any `.atlas` dir exists yet at this scope.
-    if def.id == "atlas" {
+    if def.id == ATLAS_TOOL_ID {
         return true;
     }
     root.join(def.config_dir).is_dir()
@@ -1091,10 +1095,21 @@ fn is_skill_kind(kind: &ComponentKind) -> bool {
 
 /// `<root>/.agents/skills/.projections.json` — one ledger per root (home for
 /// global, project for project). Map: skill → toolId → entry.
+///
+/// The ledger is shared by the installed Atlas and Atlas Dev, but the native
+/// agent's row is not: its skills dir is `~/.atlas/agent-skills` in one and
+/// `~/.atlas-dev/agent-skills` in the other. So Atlas Dev keeps its row under
+/// [`DEV_ATLAS_LEDGER_KEY`] on disk, sees it as the tool's own id in memory,
+/// and carries the installed Atlas's row through untouched
+/// ([`ledger_after_read`], [`ledger_for_write`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Ledger {
     version: u32,
     projections: BTreeMap<String, BTreeMap<String, LedgerEntry>>,
+    /// The other profile's native-agent rows, set aside on read and written
+    /// back as they were. Never serialized under this name.
+    #[serde(skip)]
+    other_profile: BTreeMap<String, LedgerEntry>,
 }
 
 impl Default for Ledger {
@@ -1102,8 +1117,57 @@ impl Default for Ledger {
         Self {
             version: 1,
             projections: BTreeMap::new(),
+            other_profile: BTreeMap::new(),
         }
     }
+}
+
+/// The native agent's tool id in [`TOOL_REGISTRY`].
+const ATLAS_TOOL_ID: &str = "atlas";
+/// Atlas Dev's native-agent row on disk. Unknown to the installed Atlas, which
+/// skips tool ids it has no definition for.
+const DEV_ATLAS_LEDGER_KEY: &str = "atlas-dev";
+
+/// The ledger as `profile` sees it (see [`Ledger`]).
+fn ledger_after_read(mut ledger: Ledger, profile: atlas_profile::Profile) -> Ledger {
+    if !profile.is_dev() {
+        return ledger;
+    }
+    let Ledger {
+        projections,
+        other_profile,
+        ..
+    } = &mut ledger;
+    for (skill, tools) in projections.iter_mut() {
+        if let Some(installed) = tools.remove(ATLAS_TOOL_ID) {
+            other_profile.insert(skill.clone(), installed);
+        }
+        if let Some(dev) = tools.remove(DEV_ATLAS_LEDGER_KEY) {
+            tools.insert(ATLAS_TOOL_ID.to_string(), dev);
+        }
+    }
+    projections.retain(|_, tools| !tools.is_empty());
+    ledger
+}
+
+/// The ledger as `profile` writes it: the inverse of [`ledger_after_read`].
+fn ledger_for_write(ledger: &Ledger, profile: atlas_profile::Profile) -> Ledger {
+    let mut out = ledger.clone();
+    if !profile.is_dev() {
+        return out;
+    }
+    for tools in out.projections.values_mut() {
+        if let Some(dev) = tools.remove(ATLAS_TOOL_ID) {
+            tools.insert(DEV_ATLAS_LEDGER_KEY.to_string(), dev);
+        }
+    }
+    for (skill, installed) in &ledger.other_profile {
+        out.projections
+            .entry(skill.clone())
+            .or_default()
+            .insert(ATLAS_TOOL_ID.to_string(), installed.clone());
+    }
+    out
 }
 
 fn ledger_path(root: &Path) -> PathBuf {
@@ -1113,15 +1177,17 @@ fn ledger_path(root: &Path) -> PathBuf {
 /// Read the ledger, tolerating a missing or garbage file (→ default empty).
 fn read_ledger(root: &Path) -> Ledger {
     let path = ledger_path(root);
-    match fs::read_to_string(&path) {
+    let ledger = match fs::read_to_string(&path) {
         Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
         Err(_) => Ledger::default(),
-    }
+    };
+    ledger_after_read(ledger, atlas_profile::current())
 }
 
 /// Atomically persist the ledger (reuses [`atomic_write`]).
 fn write_ledger(root: &Path, ledger: &Ledger) -> Result<(), String> {
-    let payload = serde_json::to_string_pretty(ledger).map_err(|e| e.to_string())?;
+    let on_disk = ledger_for_write(ledger, atlas_profile::current());
+    let payload = serde_json::to_string_pretty(&on_disk).map_err(|e| e.to_string())?;
     atomic_write(&ledger_path(root), &payload)
 }
 
@@ -2672,7 +2738,7 @@ impl Default for PackLock {
 }
 
 fn packs_base(root: &Path) -> PathBuf {
-    root.join(atlas_profile::dir_name()).join("packs")
+    atlas_profile::dir_in(root).join("packs")
 }
 
 fn pack_lock_path(root: &Path) -> PathBuf {
@@ -5795,14 +5861,14 @@ mod tests {
             name: REMEMBER.name,
             skill_md: "---\nname: remember\ndescription: old\n---\n\nold body\n",
         };
-        ensure_bundled_skill_at(&root, old.name, old.skill_md);
+        ensure_bundled_skill_at(&root, old.name, old.skill_md, true);
         let dir = skills_base(&root).join(REMEMBER.name);
         assert_eq!(
             fs::read_to_string(dir.join("SKILL.md")).unwrap(),
             old.skill_md
         );
 
-        ensure_bundled_skill_at(&root, REMEMBER.name, REMEMBER.skill_md);
+        ensure_bundled_skill_at(&root, REMEMBER.name, REMEMBER.skill_md, true);
 
         assert_eq!(
             fs::read_to_string(dir.join("SKILL.md")).unwrap(),
@@ -5922,6 +5988,55 @@ mod tests {
         let shipped: String = ATLAS_SELF_CONFIGURE.skill_md.lines().collect();
         let strip_frontmatter = |s: &str| s.split("---").nth(2).unwrap_or_default().to_string();
         assert_eq!(strip_frontmatter(&mapped_back), strip_frontmatter(&shipped));
+    }
+
+    /// Each build sees only its own native-agent row in the shared ledger,
+    /// and writing it never disturbs the other build's.
+    #[test]
+    fn each_profile_keeps_its_own_native_agent_ledger_row() {
+        use atlas_profile::Profile;
+        let mut on_disk = Ledger::default();
+        ledger_record(&mut on_disk, "s", ATLAS_TOOL_ID, "symlink", "installed");
+        ledger_record(&mut on_disk, "s", "codex", "symlink", "shared");
+
+        // Atlas Dev has no row of its own yet, and keeps the shared ones.
+        let mut dev = ledger_after_read(on_disk.clone(), Profile::Dev);
+        assert!(!dev.projections["s"].contains_key(ATLAS_TOOL_ID));
+        assert_eq!(dev.projections["s"]["codex"].hash, "shared");
+
+        ledger_record(&mut dev, "s", ATLAS_TOOL_ID, "symlink", "dev");
+        let written = ledger_for_write(&dev, Profile::Dev);
+        assert_eq!(written.projections["s"][ATLAS_TOOL_ID].hash, "installed");
+        assert_eq!(written.projections["s"][DEV_ATLAS_LEDGER_KEY].hash, "dev");
+
+        // The installed Atlas reads its own row back; the dev one is an
+        // unknown tool id to it.
+        let installed = ledger_after_read(written.clone(), Profile::Default);
+        assert_eq!(installed.projections["s"][ATLAS_TOOL_ID].hash, "installed");
+        assert!(tool_def(DEV_ATLAS_LEDGER_KEY).is_none());
+        // And Atlas Dev reads its own row back as the tool's id.
+        let dev_again = ledger_after_read(written, Profile::Dev);
+        assert_eq!(dev_again.projections["s"][ATLAS_TOOL_ID].hash, "dev");
+    }
+
+    /// Atlas Dev's own self-configure copy is never linked into the tools'
+    /// folders, which every Claude Code / Codex session on the machine reads.
+    #[test]
+    fn the_dev_profile_skill_is_not_linked_into_tools() {
+        let root = tmp_root_isolated();
+        for id in BUNDLED_SKILL_TOOLS {
+            let def = tool_def(id).unwrap();
+            fs::create_dir_all(root.join(def.config_dir)).unwrap();
+        }
+        ensure_bundled_skills_at(&root, atlas_profile::Profile::Dev);
+        for id in BUNDLED_SKILL_TOOLS {
+            let def = tool_def(id).unwrap();
+            assert!(
+                !tool_has_entry(&root, def, "global", DEV_BUNDLED_SKILL_NAME),
+                "{id}"
+            );
+        }
+        fs::remove_dir_all(&root).ok();
     }
 
     /// A skill both builds seed under one name (`remember`) is installed by

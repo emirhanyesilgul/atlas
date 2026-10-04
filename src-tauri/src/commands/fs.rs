@@ -143,9 +143,7 @@ pub async fn capture_screenshot(
             .unwrap_or_default();
 
         let dir = match project_path.as_deref() {
-            Some(p) => Path::new(p)
-                .join(atlas_profile::dir_name())
-                .join("screenshots"),
+            Some(p) => atlas_profile::dir_in(Path::new(p)).join("screenshots"),
             None => std::env::temp_dir(),
         };
         let _ = fs::create_dir_all(&dir);

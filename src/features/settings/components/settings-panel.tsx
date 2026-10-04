@@ -248,7 +248,7 @@ function GeneralSettings() {
   // `.atlas` in the released app, `.atlas-dev` in a dev-profile build, which
   // also keeps it out of git through `.git/info/exclude` rather than editing
   // the project's own `.gitignore`.
-  const { dev: devProfile, dirName: atlasDir } = useAppProfile();
+  const { dev: devProfile, dirName: atlasDir, productName } = useAppProfile();
 
   const recreateConfigDefaults = async () => {
     setResettingConfig(true);
@@ -413,7 +413,7 @@ function GeneralSettings() {
         label={devProfile ? `Keep ${atlasDir} out of git` : `Auto-add ${atlasDir} to .gitignore`}
         description={
           devProfile
-            ? `When you open a git-tracked project, Atlas Dev lists \`${atlasDir}/\` in the repository's local .git/info/exclude, so it stays out of version control without editing the project's .gitignore. Atlas Dev keeps its caches and state in \`${atlasDir}/\`. No-op on non-git projects.`
+            ? `When you open a git-tracked project, ${productName} lists \`${atlasDir}/\` in the repository's local .git/info/exclude, so it stays out of version control without editing the project's .gitignore. ${productName} keeps its caches and state in \`${atlasDir}/\`. No-op on non-git projects.`
             : `When you open a git-tracked project, Atlas adds \`${atlasDir}/\` to the project's .gitignore (creating one if needed). Atlas keeps its caches and state in \`${atlasDir}/\` — keeping it out of version control is almost always what you want. No-op on non-git projects.`
         }
       >
@@ -665,7 +665,7 @@ function UpdatesSettings() {
   // A dev-profile build (`bun run dev:app`) never fetches or installs a
   // release: the backend refuses both, since the release would replace the
   // installed Atlas. Say so instead of offering a button that can only fail.
-  const devProfile = useAppProfile().dev;
+  const { dev: devProfile, productName } = useAppProfile();
 
   const downloading = phase === "downloading";
   const ready = phase === "ready" || phase === "applying";
@@ -694,7 +694,7 @@ function UpdatesSettings() {
   // The "Check for updates" row swaps its control based on the live phase:
   // downloading → progress; ready → Restart button; else → Check now.
   const control = devProfile ? (
-    <span className="text-xs text-muted-foreground">Off in Atlas Dev</span>
+    <span className="text-xs text-muted-foreground">Off in {productName}</span>
   ) : ready ? (
     <button
       type="button"

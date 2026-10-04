@@ -512,9 +512,7 @@ impl SharedMemoryStore {
 
     /// Write `.atlas/project.json` if absent. Best-effort.
     fn ensure_project_file(&self, project_path: &str) {
-        let path = Path::new(project_path)
-            .join(atlas_profile::dir_name())
-            .join("project.json");
+        let path = atlas_profile::dir_in(Path::new(project_path)).join("project.json");
         if path.exists() {
             return;
         }

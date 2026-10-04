@@ -18,7 +18,7 @@ use std::path::PathBuf;
 /// Directory holding one org's log files.
 fn org_log_dir(org: &str) -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "no home dir".to_string())?;
-    let root = home.join(atlas_profile::dir_name()).join("log");
+    let root = atlas_profile::dir_in(&home).join("log");
     // An org id is a UUID we minted, but it arrives from the renderer — so
     // treat it as untrusted and refuse anything that could climb out of the log
     // directory rather than trusting the caller.
@@ -31,8 +31,7 @@ fn org_log_dir(org: &str) -> Result<PathBuf, String> {
 /// Where the pre-org global pinned log lived.
 fn legacy_pinned_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "no home dir".to_string())?;
-    Ok(home
-        .join(atlas_profile::dir_name())
+    Ok(atlas_profile::dir_in(&home)
         .join("log")
         .join("pinned.jsonl"))
 }
@@ -139,9 +138,7 @@ pub async fn rewrite_pinned_log(org: String, entries_json: String) -> Result<(),
 const PROJECT_LOG_CAP_BYTES: u64 = 1024 * 1024; // 1 MB
 
 fn project_log_path(project: &str) -> PathBuf {
-    PathBuf::from(project)
-        .join(atlas_profile::dir_name())
-        .join("logs.jsonl")
+    atlas_profile::dir_in(PathBuf::from(project)).join("logs.jsonl")
 }
 
 #[tauri::command]

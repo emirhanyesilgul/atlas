@@ -402,9 +402,7 @@ pub struct GraphLayout {
 }
 
 fn layout_path(project_path: &str) -> PathBuf {
-    std::path::Path::new(project_path)
-        .join(atlas_profile::dir_name())
-        .join("memory-graph-layout.json")
+    atlas_profile::dir_in(std::path::Path::new(project_path)).join("memory-graph-layout.json")
 }
 
 #[tauri::command]
