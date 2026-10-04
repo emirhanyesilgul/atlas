@@ -13,7 +13,7 @@ import { stripInjectedContext } from "../lib/atlas-context";
 import { agents, ensureAgent, resetAgent } from "../lib/agents-api";
 import { isDeadlineError, withDeadline } from "../lib/with-deadline";
 import { drainEdge } from "../lib/drain-gate";
-import { CHAT_STOP_EVENT, cycleChatAgent } from "../lib/switch-agent";
+import { CHAT_STOP_EVENT, cycleChatAgent, isSwitchPending } from "../lib/switch-agent";
 import { loadCachedAcpModes } from "../lib/acp-modes-cache";
 import { configOptionPushes, loadConfigOptionPrefs } from "../lib/config-option-prefs";
 import type { ImageAttachment, SessionKey } from "@/types/agents";
@@ -1061,7 +1061,9 @@ export const ChatPanel = memo(function ChatPanel({ tabId }: ChatPanelProps) {
         return;
       }
     }
-    if (drainQueue) {
+    // A switch waiting on `/remember` holds the queue: what was typed during
+    // the save is for the agent the tab switches to (`switch-agent.ts`).
+    if (drainQueue && !isSwitchPending(tabId)) {
       const next = useChatStore.getState().actions.shiftQueue(tabId);
       if (next && handleSendRef.current) {
         // Defer one microtask so the React commit completes first.

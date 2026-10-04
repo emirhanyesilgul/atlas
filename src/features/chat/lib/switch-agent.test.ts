@@ -40,6 +40,7 @@ import {
   REMEMBER_STOP_GRACE_MS,
   SESSION_HANDOFF_EVENT,
   isStartingOnly,
+  isSwitchPending,
   switchAgentForTab,
   type SessionHandoffDetail,
 } from "./switch-agent";
@@ -529,5 +530,42 @@ describe("switchAgentForTab with rememberBeforeSwitch", () => {
     status("idle");
     await vi.waitFor(() => expect(toast.dismiss).toHaveBeenCalled());
     expect(agent()).toBe("atlas-agent");
+  });
+
+  // The chat panel does not drain a queue while a switch is pending
+  // (`isSwitchPending`); clearing the session for an in-place switch used to
+  // drop whatever the user typed during the save.
+  it("a message typed during the save goes to the new agent when switching in place", async () => {
+    setup();
+    converse();
+
+    switchAgentForTab(TAB, "claude-code");
+    status("running");
+    expect(isSwitchPending(TAB)).toBe(true);
+    useChatStore.getState().actions.enqueueMessage(TAB, "now add a retry");
+    status("idle");
+    await vi.waitFor(() => expect(agent()).toBe("claude-code"));
+
+    expect(isSwitchPending(TAB)).toBe(false);
+    expect(useChatStore.getState().queues[TAB]).toEqual(["now add a retry"]);
+    expect(sends).toEqual([{ tabId: TAB, text: "/remember" }]);
+  });
+
+  it("a message typed during the save stays with the old tab under new-tab, and is sent", async () => {
+    setup(true, "new-tab");
+    converse();
+
+    switchAgentForTab(TAB, "claude-code");
+    status("running");
+    useChatStore.getState().actions.enqueueMessage(TAB, "now add a retry");
+    status("idle");
+    await vi.waitFor(() => expect(openAgentChatInNewTab).toHaveBeenCalledWith("claude-code"));
+
+    expect(agent()).toBe("codex");
+    expect(sends).toEqual([
+      { tabId: TAB, text: "/remember" },
+      { tabId: TAB, text: "now add a retry" },
+    ]);
+    expect(useChatStore.getState().queues[TAB] ?? []).toEqual([]);
   });
 });

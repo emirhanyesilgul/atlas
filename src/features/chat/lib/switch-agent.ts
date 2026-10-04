@@ -174,6 +174,27 @@ interface PendingSwitch {
 
 const pendingSwitches = new Map<string, PendingSwitch>();
 
+/** Whether a switch on `tabId` is waiting on its `/remember` turn. The chat
+ *  panel holds the tab's queue meanwhile: a message typed during the save goes
+ *  to whichever agent the tab is on once the switch is done, not to the one
+ *  being left (`rememberThenSwitch`). */
+export function isSwitchPending(tabId: string): boolean {
+  return pendingSwitches.has(tabId);
+}
+
+/** Send the head of a queue the chat panel held during a pending switch, if
+ *  the tab can take it now: bound, idle and not resuming. The rest drains
+ *  after that turn as usual. An unbound tab (switched in place) needs nothing:
+ *  its bind drains the queue. */
+function releaseHeldQueue(tabId: string): void {
+  const { sessions, queues, actions } = useChatStore.getState();
+  const sess = sessions[tabId];
+  if (!sess?.acpSessionId || sess.resumePending || isBusyAgentStatus(sess.status)) return;
+  if (!queues[tabId]?.length) return;
+  const text = actions.shiftQueue(tabId);
+  if (text) window.dispatchEvent(new CustomEvent("atlas:chat-send", { detail: { tabId, text } }));
+}
+
 /** The "saving…" notice for a pending switch; with `id`, updates it in place. */
 function showSavingToast(pending: PendingSwitch, id?: string | number): string | number {
   return toast.loading(`Saving to memory before switching to ${agentMeta(pending.next).label}…`, {
@@ -278,12 +299,19 @@ async function rememberThenSwitch(
         );
       }
     }
+    // An in-place switch clears the session, queue included, so messages typed
+    // during the save are taken out first and given back after.
+    const { queues, actions } = useChatStore.getState();
+    const typed = queues[tabId] ?? [];
+    if (typed.length) actions.clearQueue(tabId);
     switchAgentForTab(tabId, pending.next, {
       afterRemember: end === "not-started" ? "unsent" : "sent",
     });
+    for (const text of typed) useChatStore.getState().actions.enqueueMessage(tabId, text);
   } finally {
     pendingSwitches.delete(tabId);
     toast.dismiss(pending.toastId);
+    releaseHeldQueue(tabId);
   }
 }
 
