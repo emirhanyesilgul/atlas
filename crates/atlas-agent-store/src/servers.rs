@@ -518,12 +518,17 @@ impl ExternalAgentServer for LocalRegistryNpxAgent {
                 base.extend(npm_command_env(&node_binary));
                 let env = layered_env(base, &distribution_env, extra_env, &byok_env, &settings_env);
 
-                let mut command_args = vec![executable.to_string_lossy().into_owned()];
+                // The agent's own Node launch, plain at the boundary like npm's:
+                // Node fails `lstat 'C:'` on a verbatim script path (#277), and
+                // neither path should depend on how its caller resolved it.
+                let mut command_args = vec![plain_process_path(&executable)
+                    .to_string_lossy()
+                    .into_owned()];
                 command_args.extend(args);
                 command_args.extend(extra_args);
 
                 Ok(AgentServerCommand {
-                    path: node_binary,
+                    path: plain_process_path(&node_binary),
                     args: command_args,
                     env: Some(env),
                 })
