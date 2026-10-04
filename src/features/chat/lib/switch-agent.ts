@@ -1,7 +1,12 @@
 import { toast } from "sonner";
 import { useChatStore } from "@/features/chat/stores/chat-store";
 import { useSettingsStore } from "@/features/settings/stores/settings-store";
-import { NATIVE_AGENT, isBusyAgentStatus, type SwitchableAgent } from "@/types/agent";
+import {
+  NATIVE_AGENT,
+  isBusyAgentStatus,
+  type PendingSend,
+  type SwitchableAgent,
+} from "@/types/agent";
 import { agentMeta, switchableAgentIds } from "@/features/agents/lib/agent-meta";
 import type { MentionPastSession } from "./mentions";
 import { openAgentChatInNewTab } from "./open-agent-session";
@@ -62,11 +67,14 @@ export interface SessionHandoffDetail {
  * `opts.afterRemember` is that deferred switch running: the save is over, so
  * it is not asked for again. `"sent"` means the `/remember` turn reached the
  * conversation, so a handoff leaves it out of the attached transcript.
+ * `opts.typed` is what the user typed while the save ran: on an in-place
+ * switch the first message goes out on the new bind, carrying the handoff when
+ * there is one, and the rest queue behind it.
  */
 export function switchAgentForTab(
   tabId: string,
   next: SwitchableAgent,
-  opts: { afterRemember?: "sent" | "unsent" } = {},
+  opts: { afterRemember?: "sent" | "unsent"; typed?: string[] } = {},
 ): void {
   const pending = pendingSwitches.get(tabId);
   if (pending && !opts.afterRemember) {
@@ -124,7 +132,12 @@ export function switchAgentForTab(
     }
   }
   const previousAgent = sess?.agentType ?? NATIVE_AGENT;
-  const held = startingOnly ? sess?.pendingSend : undefined;
+  const [firstTyped, ...restTyped] = opts.typed ?? [];
+  const held: PendingSend | undefined = startingOnly
+    ? sess?.pendingSend
+    : firstTyped === undefined
+      ? undefined
+      : { content: firstTyped, mentions: handoff ? [handoff] : [] };
   if ((sess?.messages.length ?? 0) > 0) {
     chat.actions.clearSession(tabId);
   }
@@ -140,8 +153,13 @@ export function switchAgentForTab(
     );
     actions.updateSessionStatus(tabId, "running");
     actions.setPendingSend(tabId, held);
+    for (const text of restTyped) actions.enqueueMessage(tabId, text);
   }
-  if (handoff) {
+  if (handoff && firstTyped !== undefined) {
+    toast(
+      `${agentMeta(previousAgent).label} conversation handed to ${agentMeta(next).label} with your message.`,
+    );
+  } else if (handoff) {
     const detail: SessionHandoffDetail = { tabId, mention: handoff };
     window.dispatchEvent(new CustomEvent(SESSION_HANDOFF_EVENT, { detail }));
     toast(
@@ -299,15 +317,20 @@ async function rememberThenSwitch(
         );
       }
     }
-    // An in-place switch clears the session, queue included, so messages typed
-    // during the save are taken out first and given back after.
+    // Messages typed during the save are for the agent the tab ends up on. An
+    // in-place switch clears the session, queue included, so they are taken
+    // out and handed to the switch; when a new tab opened instead, they go
+    // back to this tab.
     const { queues, actions } = useChatStore.getState();
     const typed = queues[tabId] ?? [];
     if (typed.length) actions.clearQueue(tabId);
     switchAgentForTab(tabId, pending.next, {
       afterRemember: end === "not-started" ? "unsent" : "sent",
+      typed,
     });
-    for (const text of typed) useChatStore.getState().actions.enqueueMessage(tabId, text);
+    if (stillOn(tabId, from)) {
+      for (const text of typed) useChatStore.getState().actions.enqueueMessage(tabId, text);
+    }
   } finally {
     pendingSwitches.delete(tabId);
     toast.dismiss(pending.toastId);

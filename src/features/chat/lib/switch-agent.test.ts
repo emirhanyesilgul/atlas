@@ -547,8 +547,38 @@ describe("switchAgentForTab with rememberBeforeSwitch", () => {
     await vi.waitFor(() => expect(agent()).toBe("claude-code"));
 
     expect(isSwitchPending(TAB)).toBe(false);
-    expect(useChatStore.getState().queues[TAB]).toEqual(["now add a retry"]);
+    // Held for the new bind, like a first message sent while starting.
+    const sess = useChatStore.getState().sessions[TAB];
+    expect(sess.pendingSend).toEqual({ content: "now add a retry", mentions: [] });
+    expect(sess.messages.map((m) => m.content)).toEqual(["now add a retry"]);
+    expect(useChatStore.getState().queues[TAB] ?? []).toEqual([]);
     expect(sends).toEqual([{ tabId: TAB, text: "/remember" }]);
+  });
+
+  it("with handoff, the first message typed during the save carries the conversation", async () => {
+    setup(true, "handoff");
+    converse();
+
+    switchAgentForTab(TAB, "claude-code");
+    status("running");
+    const { actions } = useChatStore.getState();
+    actions.enqueueMessage(TAB, "now add a retry");
+    actions.enqueueMessage(TAB, "and a test");
+    status("idle");
+    await vi.waitFor(() => expect(agent()).toBe("claude-code"));
+
+    const sess = useChatStore.getState().sessions[TAB];
+    expect(sess.pendingSend?.content).toBe("now add a retry");
+    expect(sess.pendingSend?.mentions).toEqual([
+      expect.objectContaining({
+        kind: "past_session",
+        sessionId: `acp-${TAB}`,
+        endBeforeRemember: true,
+      }),
+    ]);
+    expect(useChatStore.getState().queues[TAB]).toEqual(["and a test"]);
+    // Not also left in the composer, where it would go out a second time.
+    expect(handoffs).toEqual([]);
   });
 
   it("a message typed during the save stays with the old tab under new-tab, and is sent", async () => {
