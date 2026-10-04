@@ -3287,6 +3287,7 @@ dependencies = [
 name = "atlas-instruction-sync"
 version = "0.1.0"
 dependencies = [
+ "atlas-profile",
  "serde_json",
  "tempfile",
  "windows-sys 0.52.0",

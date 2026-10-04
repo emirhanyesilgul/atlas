@@ -5795,14 +5795,14 @@ mod tests {
             name: REMEMBER.name,
             skill_md: "---\nname: remember\ndescription: old\n---\n\nold body\n",
         };
-        ensure_bundled_skill_at(&root, &old);
+        ensure_bundled_skill_at(&root, old.name, old.skill_md);
         let dir = skills_base(&root).join(REMEMBER.name);
         assert_eq!(
             fs::read_to_string(dir.join("SKILL.md")).unwrap(),
             old.skill_md
         );
 
-        ensure_bundled_skill_at(&root, &REMEMBER);
+        ensure_bundled_skill_at(&root, REMEMBER.name, REMEMBER.skill_md);
 
         assert_eq!(
             fs::read_to_string(dir.join("SKILL.md")).unwrap(),
@@ -5922,6 +5922,29 @@ mod tests {
         let shipped: String = ATLAS_SELF_CONFIGURE.skill_md.lines().collect();
         let strip_frontmatter = |s: &str| s.split("---").nth(2).unwrap_or_default().to_string();
         assert_eq!(strip_frontmatter(&mapped_back), strip_frontmatter(&shipped));
+    }
+
+    /// A skill both builds seed under one name (`remember`) is installed by
+    /// the dev profile only when missing. Overwriting it would rewrite the
+    /// installed Atlas's copy, and the two builds would take turns doing so.
+    #[test]
+    fn the_dev_profile_never_overwrites_a_shared_skill() {
+        let root = tmp_root_isolated();
+        let remember = skills_base(&root).join(REMEMBER.name).join("SKILL.md");
+
+        ensure_bundled_skills_at(&root, atlas_profile::Profile::Dev);
+        assert_eq!(fs::read_to_string(&remember).unwrap(), REMEMBER.skill_md);
+
+        // The installed Atlas shipped a different version, untouched since.
+        fs::write(&remember, "installed version").unwrap();
+        fs::write(
+            remember.with_file_name(BUNDLED_HASH_FILE),
+            sha256_hex("installed version"),
+        )
+        .unwrap();
+        ensure_bundled_skills_at(&root, atlas_profile::Profile::Dev);
+        assert_eq!(fs::read_to_string(&remember).unwrap(), "installed version");
+        fs::remove_dir_all(&root).ok();
     }
 
     /// The two copies live side by side in the shared store, and seeding one

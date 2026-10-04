@@ -8,6 +8,8 @@ description = "Mirrors a project's convention files (CLAUDE.md and .claude/rules
 name = "atlas_instruction_sync"
 
 [dependencies]
+# `.atlas` vs `.atlas-dev`: where the pack ledger lives (see that crate).
+atlas-profile = { path = "../atlas-profile" }
 # Reads the pack-projection ledger, so a rule a pack already put in AGENTS.md
 # as its own block is not mirrored a second time.
 serde_json = { workspace = true }

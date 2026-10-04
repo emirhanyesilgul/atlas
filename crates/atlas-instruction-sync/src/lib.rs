@@ -797,8 +797,7 @@ fn ledger_str<'a>(entry: &'a serde_json::Value, camel: &str, snake: &str) -> Opt
 /// `.atlas/packs/.pack-projections.json`; a missing or unreadable ledger means
 /// none.
 pub fn pack_rules_in_agents_md(root: &Path, agents_md: &str) -> Vec<String> {
-    let path = root
-        .join(".atlas")
+    let path = atlas_profile::dir_in(root)
         .join("packs")
         .join(".pack-projections.json");
     let Ok(raw) = fs::read_to_string(path) else {
@@ -1157,7 +1156,7 @@ pub fn is_source_path(root: &Path, path: &Path) -> bool {
     // as `CLAUDE.md`, and the watcher reports the name as it is on disk.
     rel.eq_ignore_ascii_case(CLAUDE_MD)
         || rel.eq_ignore_ascii_case(DOT_CLAUDE_MD)
-        || rel == ".atlas/packs/.pack-projections.json"
+        || rel == format!("{}/packs/.pack-projections.json", atlas_profile::dir_name())
         || (rel.starts_with(".claude/rules/") && rel.to_ascii_lowercase().ends_with(".md"))
 }
 
@@ -1180,7 +1179,7 @@ pub fn watch_targets(root: &Path) -> Vec<WatchTarget> {
         target(root.to_path_buf(), false),
         target(root.join(".claude"), false),
         target(root.join(".claude").join("rules"), true),
-        target(root.join(".atlas").join("packs"), false),
+        target(atlas_profile::dir_in(root).join("packs"), false),
     ]
 }
 
@@ -1188,10 +1187,11 @@ pub fn watch_targets(root: &Path) -> Vec<WatchTarget> {
 /// `.atlas` directory that holds the ledger's), so a watcher armed before it
 /// existed should arm it now.
 pub fn is_watch_dir_path(root: &Path, path: &Path) -> bool {
-    matches!(
-        rel_path(root, path).as_deref(),
-        Some(".claude" | ".claude/rules" | ".atlas" | ".atlas/packs")
-    )
+    let Some(rel) = rel_path(root, path) else {
+        return false;
+    };
+    let atlas = atlas_profile::dir_name();
+    rel == ".claude" || rel == ".claude/rules" || rel == atlas || rel == format!("{atlas}/packs")
 }
 
 #[cfg(test)]
