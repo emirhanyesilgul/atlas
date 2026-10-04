@@ -198,6 +198,10 @@ pub fn run() {
             // The app icon, before the window shows. Later changes arrive
             // through `notify_settings_changed`.
             app_icon::apply(app.handle(), &migration.manager.effective().app_icon);
+            // Whether `instructionSync` is on as Atlas starts, so switching it
+            // off before any project opens still takes the mirrored blocks out.
+            app.state::<commands::instruction_sync::InstructionSyncState>()
+                .init(migration.manager.effective().instruction_sync);
             let atlas_config: state::AtlasConfigHandle = Arc::new(Mutex::new(migration.manager));
             app.manage(atlas_config.clone());
             commands::atlas_config::start_watcher(app.handle(), atlas_config);
@@ -389,6 +393,9 @@ pub fn run() {
                     window.state::<MentionCacheState>().drop_window(label);
                     window
                         .state::<commands::git_autofetch::GitAutoFetchState>()
+                        .drop_window(label);
+                    window
+                        .state::<commands::instruction_sync::InstructionSyncState>()
                         .drop_window(label);
                 }
                 // Coming back to Atlas is when a stale Pull badge misleads.

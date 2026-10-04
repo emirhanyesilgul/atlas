@@ -5561,4 +5561,24 @@ mod tests {
         assert!(!dir.join(BUNDLED_HASH_FILE).exists());
         fs::remove_dir_all(&root).ok();
     }
+
+    /// `atlas-instruction-sync` re-derives these to find a pack's rule in
+    /// `AGENTS.md` (it sits below `src-tauri` and cannot call them). If they
+    /// drift, a pack rule is mirrored a second time.
+    #[test]
+    fn instruction_sync_derives_pack_rule_markers_the_same_way() {
+        for name in [
+            "Style Guide",
+            "a__b..c",
+            "-x!!y-",
+            "  Ask Before  Paid Runs ",
+        ] {
+            let ours = sanitize_name(name).unwrap();
+            assert_eq!(atlas_instruction_sync::pack_rule_name(name), ours);
+            assert_eq!(
+                atlas_instruction_sync::pack_rule_marker("pack", &ours),
+                rule_marker_start("pack", &ours)
+            );
+        }
+    }
 }

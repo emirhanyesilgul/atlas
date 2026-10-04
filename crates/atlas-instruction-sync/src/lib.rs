@@ -16,7 +16,9 @@
 //! an agent. The sources stay the single place a rule is edited; the block
 //! says so.
 //!
-//! Three things are deliberately left out of the block:
+//! Four things are deliberately left out of the block:
+//! - an `@AGENTS.md` import line in `CLAUDE.md`, which inside `AGENTS.md`
+//!   would only point the file at itself;
 //! - a rule a pack projected into `.claude/rules/` when `AGENTS.md` already
 //!   carries that rule as the pack's own `atlas-pack` block;
 //! - a rule's `paths:` frontmatter is not a filter here (`AGENTS.md` has no
@@ -214,7 +216,11 @@ fn unquote(s: &str) -> String {
 pub fn render(claude_md: Option<&str>, rules: &[Rule]) -> Option<String> {
     let claude_md = claude_md
         .map(normalize)
-        .map(|s| s.trim_start_matches(BOM).trim_matches('\n').to_string())
+        .map(|s| {
+            let s = s.trim_start_matches(BOM);
+            let kept: Vec<&str> = s.split('\n').filter(|l| !is_agents_md_import(l)).collect();
+            kept.join("\n").trim_matches('\n').to_string()
+        })
         .filter(|s| !s.trim().is_empty());
     let rules: Vec<&Rule> = rules.iter().filter(|r| !r.body.trim().is_empty()).collect();
     if claude_md.is_none() && rules.is_empty() {
@@ -529,14 +535,16 @@ fn rel_path(root: &Path, path: &Path) -> Option<String> {
 }
 
 /// The marker a pack writes around a rule it appends to `AGENTS.md`. Must
-/// match `rule_marker_start` in `src-tauri/src/commands/skills.rs`.
-fn pack_rule_marker(pack: &str, rule: &str) -> String {
+/// match `rule_marker_start` in `src-tauri/src/commands/skills.rs`, which
+/// asserts that it does.
+pub fn pack_rule_marker(pack: &str, rule: &str) -> String {
     format!("<!-- atlas-pack:{pack}:{rule} START -->")
 }
 
 /// A rule's marker name derived from its file stem, the way the pack
-/// installer's `sanitize_name` derives it from the component name.
-fn pack_rule_name(stem: &str) -> String {
+/// installer's `sanitize_name` derives it from the component name, which
+/// `skills.rs` asserts.
+pub fn pack_rule_name(stem: &str) -> String {
     let mut out = String::with_capacity(stem.len());
     let mut prev_dash = false;
     for ch in stem.trim().to_lowercase().chars() {
@@ -629,8 +637,12 @@ pub fn pack_rules_in_agents_md(root: &Path, agents_md: &str) -> Vec<String> {
 /// Whether `CLAUDE.md` says nothing but "read `AGENTS.md`" (an `@AGENTS.md`
 /// import, the usual way to keep one file for every agent).
 fn only_imports_agents_md(claude_md: &str) -> bool {
-    let body = claude_md.trim_start_matches(BOM).trim();
-    body == "@AGENTS.md" || body == "@./AGENTS.md"
+    is_agents_md_import(claude_md.trim_start_matches(BOM))
+}
+
+/// Whether one line (or a whole trimmed text) is an `@AGENTS.md` import.
+fn is_agents_md_import(line: &str) -> bool {
+    matches!(line.trim(), "@AGENTS.md" | "@./AGENTS.md")
 }
 
 // ── Disk ────────────────────────────────────────────────────────────────────
@@ -861,7 +873,9 @@ pub fn is_source_path(root: &Path, path: &Path) -> bool {
     let Some(rel) = rel_path(root, path) else {
         return false;
     };
-    rel == "CLAUDE.md"
+    // Any case: on a case-insensitive disk `claude.md` is what `sync` reads
+    // as `CLAUDE.md`, and the watcher reports the name as it is on disk.
+    rel.eq_ignore_ascii_case(CLAUDE_MD)
         || rel == ".atlas/packs/.pack-projections.json"
         || (rel.starts_with(".claude/rules/") && rel.to_ascii_lowercase().ends_with(".md"))
 }

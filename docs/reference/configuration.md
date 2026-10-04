@@ -296,10 +296,11 @@ a rule. The block sits between these two lines, each on a line of its own:
   each window, and no other. A project you switch to later is synced when it
   becomes active. An `AGENTS.md` is created only when there is something to
   mirror.
-- **Switching it off** stops the watching and takes the block back out of the
-  projects Atlas was keeping in sync, under the same checks as a sync below.
-  An `AGENTS.md` that held nothing but the block is deleted. A project that is
-  not open keeps its block until you remove it by hand.
+- **Switching it off** stops the watching and takes the block back out of
+  every project Atlas wrote it into, open or not, under the same checks as a
+  sync below. Atlas remembers those projects in `instruction-sync.json` in its
+  app config directory. An `AGENTS.md` that held nothing but the block is
+  deleted.
 - **Your text is never changed.** Every byte outside the block, line endings
   included, stays as it was. The block takes the line ending of the line just
   before it. Atlas leaves `AGENTS.md` alone, and logs why, when the markers
@@ -312,6 +313,12 @@ a rule. The block sits between these two lines, each on a line of its own:
 - **Pack rules.** A rule a pack projected into `.claude/rules/` is left out
   when `AGENTS.md` already carries it as that pack's own
   `<!-- atlas-pack:{pack}:{rule} START -->` block.
+- An `@AGENTS.md` import line in `CLAUDE.md` is left out of the block, where it
+  would point `AGENTS.md` at itself. Other `@path` imports are copied as
+  written, not expanded.
+- Some agents stop reading `AGENTS.md` past a size limit (32 KiB is a common
+  default), and the block sits at the end of the file. Atlas logs a warning
+  when a sync leaves `AGENTS.md` larger than that.
 - A rule's `paths:` frontmatter becomes an "applies when working on" line, since
   `AGENTS.md` has no path scoping. Hooks and permission lists
   (`.claude/settings.json`) are not instructions and are not mirrored.

@@ -10,10 +10,10 @@ name = "atlas_instruction_sync"
 [dependencies]
 # Reads the pack-projection ledger, so a rule a pack already put in AGENTS.md
 # as its own block is not mirrored a second time.
-serde_json = "1"
+serde_json = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 
 # The workspace lint table is only real for members that opt in —
 # without this stanza it is dead configuration (#60).

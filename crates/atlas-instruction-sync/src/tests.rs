@@ -741,6 +741,18 @@ fn a_pack_rule_missing_from_agents_md_is_mirrored() {
 }
 
 #[test]
+fn an_agents_md_import_in_claude_md_is_not_mirrored() {
+    let inner = render(
+        Some("@AGENTS.md\n\nClaude-only rule\n  @./AGENTS.md\n"),
+        &[],
+    )
+    .unwrap();
+    assert!(inner.contains("Claude-only rule"));
+    assert!(!inner.contains("@AGENTS.md") && !inner.contains("@./AGENTS.md"));
+    assert_eq!(render(Some("@AGENTS.md\n\n"), &[]), None);
+}
+
+#[test]
 fn the_pack_rule_name_follows_the_installers_sanitizing() {
     assert_eq!(pack_rule_name("Style Guide"), "style-guide");
     assert_eq!(pack_rule_name("a__b..c"), "a__b..c");
@@ -753,6 +765,7 @@ fn the_pack_rule_name_follows_the_installers_sanitizing() {
 fn source_paths_are_the_ones_sync_reads() {
     let root = Path::new("/p");
     assert!(is_source_path(root, Path::new("/p/CLAUDE.md")));
+    assert!(is_source_path(root, Path::new("/p/claude.md")));
     assert!(is_source_path(root, Path::new("/p/.claude/rules/a.md")));
     assert!(is_source_path(root, Path::new("/p/.claude/rules/sub/B.MD")));
     assert!(is_source_path(
