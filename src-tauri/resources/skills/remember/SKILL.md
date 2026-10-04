@@ -1,6 +1,7 @@
 ---
 name: remember
 description: Save the decisions, facts, dead ends and architecture this conversation established to Atlas's shared memory, so other agents and future sessions can build on them.
+argument-hint: "[focus]"
 ---
 
 # Remember

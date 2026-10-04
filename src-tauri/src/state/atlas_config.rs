@@ -737,13 +737,13 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
     ),
     (
         "notificationsEnabled",
-        "# Notifications master switch. Off silences every notification except
+        "# Notifications master switch. Off silences every notification except\n\
          # sign-in problems, which always show. (default: true)",
     ),
     (
         "notifyNeedsYouNative",
-        "# OS banner for notifications that need you — a permission request, a
-         # question, a terminal asking for input. Shown only when you are away.
+        "# OS banner for notifications that need you — a permission request, a\n\
+         # question, a terminal asking for input. Shown only when you are away.\n\
          # (default: true)",
     ),
     (
@@ -752,7 +752,7 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
     ),
     (
         "notifyOutcomeNative",
-        "# OS banner when an agent turn or terminal command finishes or fails.
+        "# OS banner when an agent turn or terminal command finishes or fails.\n\
          # Shown only when you are away. (default: true)",
     ),
     (
@@ -761,7 +761,7 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
     ),
     (
         "notifyWarningNative",
-        "# OS banner for warnings — context nearly full, rate limited, retrying,
+        "# OS banner for warnings — context nearly full, rate limited, retrying,\n\
          # agent stopped. (default: false)",
     ),
     (
@@ -770,7 +770,7 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
     ),
     (
         "notifyTeamNative",
-        "# OS banner for Chat direct messages and @mentions. Shown only when you
+        "# OS banner for Chat direct messages and @mentions. Shown only when you\n\
          # are away. (default: true)",
     ),
     (
@@ -779,12 +779,12 @@ const SETTINGS_DOCS: &[(&str, &str)] = &[
     ),
     (
         "notifyPermissionActions",
-        "# Show Allow once / Deny buttons on permission banners. Off: the banner
+        "# Show Allow once / Deny buttons on permission banners. Off: the banner\n\
          # only opens the session. (default: true)",
     ),
     (
         "notificationsMigrated",
-        "# Set once Atlas has folded your earlier terminal and agent notification
+        "# Set once Atlas has folded your earlier terminal and agent notification\n\
          # choices into the keys above. Leave it alone. (default: false)",
     ),
     (
@@ -3211,6 +3211,21 @@ red = "#ee0000"
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "schemaVersion = 1\n");
         assert!(temp_files_beside(&path).is_empty());
+    }
+
+    /// A comment line that misses its `\n\` continuation keeps the source's
+    /// indentation, so the generated `config.toml` shows it pushed right of the
+    /// rest. Valid TOML, so nothing else notices.
+    #[test]
+    fn every_settings_docs_line_starts_with_a_hash() {
+        for (key, comment) in SETTINGS_DOCS {
+            for line in comment.lines() {
+                assert!(
+                    line.starts_with('#'),
+                    "`{key}` has a comment line not starting with `#`: {line:?}"
+                );
+            }
+        }
     }
 
     /// The generated file is the schema documentation now — the skill points
