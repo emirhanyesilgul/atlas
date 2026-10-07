@@ -144,6 +144,30 @@ describe("selected response actions", () => {
     expect(screen.queryByRole("group", { name: "Selected response actions" })).toBeNull();
   });
 
+  it("keeps a dismissed selection dismissed until the selection changes", async () => {
+    const frame = () =>
+      act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    render(<Harness />);
+    select("prose");
+    await screen.findByRole("group", { name: "Selected response actions" });
+    // A press on non-selectable chrome leaves the selection in place.
+    for (const target of [screen.getByText("Outside"), screen.getByTestId("viewport")]) {
+      fireEvent.pointerDown(target);
+      fireEvent.pointerUp(target);
+      await frame();
+      expect(screen.queryByRole("group", { name: "Selected response actions" })).toBeNull();
+      expect(window.getSelection()?.isCollapsed).toBe(false);
+    }
+    select("prose");
+    await screen.findByRole("group", { name: "Selected response actions" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(screen.getByText("Outside"));
+    await frame();
+    expect(screen.queryByRole("group", { name: "Selected response actions" })).toBeNull();
+  });
+
   it("offers whole-message Comment near hovered prose without adding an excerpt", async () => {
     render(<Harness />);
     fireEvent.pointerMove(screen.getByTestId("prose"), { clientX: 100, clientY: 200 });

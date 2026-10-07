@@ -49,12 +49,22 @@ export function ResponseSelectionActions({
     }
     let frame = 0;
     let selecting = false;
+    // Clicking non-selectable chrome (sidebar, gutters) leaves the selection
+    // intact, so the next pointerup would read it and bring the toolbar back.
+    // A dismissed selection stays dismissed until the selection changes.
+    let dismissed = false;
     const dismiss = () => {
       openRef.current = false;
+      dismissed = true;
       setTarget(null);
     };
     const readSelection = () => {
-      if (selecting || openRef.current || toolbarRef.current?.contains(document.activeElement))
+      if (
+        dismissed ||
+        selecting ||
+        openRef.current ||
+        toolbarRef.current?.contains(document.activeElement)
+      )
         return;
       const selected = selectedResponse(window.getSelection(), viewport);
       if (!selected) {
@@ -79,6 +89,10 @@ export function ResponseSelectionActions({
     const schedule = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(readSelection);
+    };
+    const selectionChange = () => {
+      dismissed = false;
+      schedule();
     };
     const move = (event: PointerEvent) => {
       if (
@@ -170,7 +184,7 @@ export function ResponseSelectionActions({
       }
     });
     resizeObserver.observe(viewport);
-    document.addEventListener("selectionchange", schedule);
+    document.addEventListener("selectionchange", selectionChange);
     document.addEventListener("pointerup", pointerUp);
     document.addEventListener("pointercancel", pointerCancel);
     document.addEventListener("pointerdown", pointerDown);
@@ -185,7 +199,7 @@ export function ResponseSelectionActions({
       cancelAnimationFrame(frame);
       observer.disconnect();
       resizeObserver.disconnect();
-      document.removeEventListener("selectionchange", schedule);
+      document.removeEventListener("selectionchange", selectionChange);
       document.removeEventListener("pointerup", pointerUp);
       document.removeEventListener("pointercancel", pointerCancel);
       document.removeEventListener("pointerdown", pointerDown);
