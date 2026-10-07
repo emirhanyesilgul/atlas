@@ -35,6 +35,18 @@ const SCRIPT = path.resolve(
   "target-gc.sh",
 );
 
+// `ci:local` runs the script on Windows too, through Git Bash. Its usr/bin holds
+// bash and the coreutils the script calls; System32's bash.exe is WSL's. Outside
+// Git Bash, PATH usually has only Git's cmd/, next to usr/.
+const BASICS =
+  process.platform === "win32"
+    ? (process.env.PATH ?? "")
+        .split(path.delimiter)
+        .flatMap((p) => [p, path.join(p, "..", "usr", "bin")])
+        .filter((p) => existsSync(path.join(p, "bash.exe")) && existsSync(path.join(p, "cat.exe")))
+        .slice(0, 1)
+    : ["/usr/bin", "/bin"];
+
 let dir: string;
 let bin: string;
 let target: string;
@@ -52,11 +64,15 @@ function run(release: string, { sweepInstalled = true } = {}) {
   stub("cargo", `echo "$*" >> "${log}"; echo "[INFO] Cleaned 1 GiB"`);
   if (sweepInstalled) stub("cargo-sweep", "exit 0");
   else rmSync(path.join(bin, "cargo-sweep"), { force: true });
+  // Windows spells it `Path`; drop every spelling so ours is the only one.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"),
+  );
   return execFileSync("bash", [SCRIPT, target], {
     encoding: "utf8",
     // Only the stubs and the basics: a real cargo-sweep on this machine must
     // not stand in for the stub the test removed.
-    env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
+    env: { ...env, PATH: [bin, ...BASICS].join(path.delimiter) },
   });
 }
 
